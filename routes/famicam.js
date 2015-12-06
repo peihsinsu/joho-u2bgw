@@ -67,7 +67,7 @@ function checkParams(actionType,req){
     duid : req.params.duid ,
 
   }
-  if(shost) liveCfg.rtspSource : ((shost.lastIndexOf('/') == shost.length+1)? shost.substr(0,shost.length-1) :shost)+ '/' + req.params.duid;
+  if(shost) liveCfg.rtspSource = ((shost.lastIndexOf('/') == shost.length+1)? shost.substr(0,shost.length-1) :shost)+ '/' + req.params.duid;
   if(req.body.status){
     liveCfg.status = req.body.status;
   }
