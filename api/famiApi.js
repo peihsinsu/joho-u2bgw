@@ -153,7 +153,7 @@ addStream = function ( auth, youtube, uname, duid, next) {
         surl : streamUrl,
         status : 0 ,
         sStatus : 'ready',
-        uname : uname ,
+        uName : uname ,
         duid : duid
       }
       reqStream.msg = streamConfig;
