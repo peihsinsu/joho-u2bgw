@@ -235,7 +235,7 @@ listStream = function(auth,youtube,streamId,next){
 processStream = function (auth,youtube,rtspSrc,vid,streamConfig,next){
   streamConfig.vid = vid;
   var iid ='';
-  logger.debug('processStream ...',sStatus[2],streamConfig.sStatus,streamConfig.sStatus != sStatus[2]);
+  logger.debug('processStream ...',retryCfg,sStatus[2],streamConfig.sStatus,streamConfig.sStatus != sStatus[2]);
   //判斷是否需ffmpeg
   if(streamConfig.sStatus != sStatus[2]){
     console.log('#### Process stream ffmpeg http://localhost:3001/processLive ####');
@@ -553,7 +553,7 @@ var doLiveStream = function(auth,youtube,rtspUrl,uName,duid,next){
         next(null,{
           code : 200,
           msg : 'Success',
-          eventId : vid,
+          eventId : videoId,
           url : 'https://www.youtube.com/watch?v='+videoId,
           eventStatus : 'ready'
         });
