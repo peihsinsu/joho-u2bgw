@@ -5,7 +5,7 @@ var logger = require('morgan');
 var cookieParser = require('cookie-parser');
 var bodyParser = require('body-parser');
 
-//var routes = require('./routes/index');
+var routes = require('./routes/home');
 //var users = require('./routes/users');
 var famicam = require('./routes/famicam');
 var liveHook = require('./routes/liveHook');
@@ -24,7 +24,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-//app.use('/', routes);
+app.use('/', routes);
 //app.use('/users', users);
 app.use('/familive',famicam);
 app.use('/liveHook',liveHook);
