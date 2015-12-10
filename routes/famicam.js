@@ -64,13 +64,18 @@ function checkParams(actionType,req){
       access_token : tokenSet[1],
       token_type : tokenSet[0]
     } ,
-    duid : req.params.duid ,
-
+    duid : req.params.duid,
+    webhook : req.body.webHookHost || 'http://localhost:3000/liveHook',
+    nickName : req.body.nickName || 'FAMI'
   }
-  if(shost) liveCfg.rtspSource = ((shost.lastIndexOf('/') == shost.length+1)? shost.substr(0,shost.length-1) :shost)+ '/' + req.params.duid;
+  if(shost) liveCfg.rtspSource = ((shost.lastIndexOf('/') == shost.length-1)? shost.substr(0,shost.length-1) :shost)+ '/' + req.params.duid;
   if(req.body.status){
     liveCfg.status = req.body.status;
   }
+  if(req.body.retry){
+    liveCfg.retry = req.body.retry;
+  }
+
   console.log('success check params:',liveCfg);
   return {code:200 ,msg:liveCfg}
 }

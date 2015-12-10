@@ -88,17 +88,18 @@ checkAndTransit = function( auth, youtube, status, videoId, retry, next){
 
 }
 
-addBroadCast = function( auth, youtube, uname, duid, next) {
+addBroadCast = function( auth, youtube, uName, duid, nName, next) {
   //** CHANGE GET DATE WITH CODE
   var sDate = new Date(new Date().getTime()+30*1000);
   var eDate = new Date(sDate.getFullYear()+1,sDate.getMonth(),sDate.getDate(),sDate.getHours(),sDate.getMinutes());
+  console.log('nName------->',nName);
   var reqBroadcast = {
     part: 'snippet,status',
     resource: {
       snippet: {
         scheduledStartTime: moment(sDate).format('YYYY-MM-DDTHH:mm:ss.sZ'),
         scheduledEndTime: moment(eDate).format('YYYY-MM-DDTHH:mm:ss.sZ'),
-        title: uname + '-' + duid + '-' + moment(sDate).format('YYYYMMDDHHmm')
+        title: nName + '-' + uName + '-' + duid + '-' + moment(sDate).format('YYYYMMDDHHmm')
       },
       status: {
         privacyStatus: 'private'
@@ -232,26 +233,33 @@ listStream = function(auth,youtube,streamId,next){
   });
 };
 
-processStream = function (auth,youtube,rtspSrc,vid,streamConfig,next){
+processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nName,next){
   streamConfig.vid = vid;
   var iid ='';
+  var isFerr = false;
   logger.debug('processStream ...',retryCfg,sStatus[2],streamConfig.sStatus,streamConfig.sStatus != sStatus[2]);
   //判斷是否需ffmpeg
   if(streamConfig.sStatus != sStatus[2]){
     console.log('#### Process stream ffmpeg http://localhost:3001/processLive ####');
     request.post('http://localhost:3001/processLive',
         {form:{
-          rtspSrc:rtspSrc,
-          uName:streamConfig.uName,
-          duid:streamConfig.duid,
-          surl:streamConfig.surl}
+            rtspSrc:rtspSrc,
+            uName:streamConfig.uName,
+            duid:streamConfig.duid,
+            surl:streamConfig.surl,
+            webhook:webhook,
+            retry:retry,
+            nickName : nName,
+            url : 'https://www.youtube.com/watch?v='+vid
+          }
         },function(e,r,d) {
           console.log('ffmpeg response : ',e,d);
           streamConfig.api = 'ffmpeg post';
           if (e) {
-            stream.msg = d;
+            streamConfig.msg = d;
             console.log('ffmpeg error :', e);
             doLog(e, streamConfig);
+            isFerr = true;
           } else {
             doLog(null, streamConfig);
             try {
@@ -261,11 +269,39 @@ processStream = function (auth,youtube,rtspSrc,vid,streamConfig,next){
             }
           }
         });
-  }
 
+  }
+  function innerHook(rt){
+    try{
+      return request.post(webhook+'/'+uName+'/'+duid,
+          {form:{
+            userId:streamConfig.uName,
+            duid:streamConfig.duid,
+            result:rt,
+            nickName:nName,
+            retry:retry||0,
+            url : 'https://www.youtube.com/watch?v='+vid,
+            UTCTime : new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')
+          }},
+          function(e,r,d){
+            if(e) logger.error(webhook+' --> error:',e);
+            else logger.info(webhook+' --> success',
+                {userName:uName,duid:duid,status:(rt==0?'success':'fail')});
+          });
+    }catch(e){
+      logger.error('Error hook error',e);
+    }
+  }
   //Transit depend on bdstatus ...
   var retryCnt = 0;
+  if(streamConfig.status==2 && retryCnt == 0 && !isFerr){
+    innerHook(0);
+  }
   iid = setInterval(function () {
+    //重覆三次都錯
+    if(streamConfig.status!=2 && retryCnt == retryCfg.cnt){
+      innerHook(1);
+    }
     if ((streamConfig.status == 0 || streamConfig.status == 1) && retryCnt < retryCfg.cnt) {
       listStream(auth, youtube, streamConfig.sid, function (err, stream) {
         retryCnt += 1;
@@ -306,6 +342,8 @@ processStream = function (auth,youtube,rtspSrc,vid,streamConfig,next){
                         } else {
                           streamConfig.status == 2;
                           clearInterval(iid);
+                          //do webhook
+                          innerHook(0);
                         }
                       })
                     }
@@ -481,8 +519,8 @@ exports.u2beLiveFlow = function(liveCfg,next){
 
 }
 
-function checkBCExist( items, uname, duid){
-  var prefix = uname + '-' + duid;
+function checkBCExist( items, uname, duid ){
+  var prefix =  uname + '-' + duid;
   //console.log('checkBCExist =====>',items);
   var item ;
   for(var idx =0;idx< items.length;idx++){
@@ -538,15 +576,20 @@ exports.getLiveInfo = function(liveCfg,next) {
 }
 
 
-var doLiveStream = function(auth,youtube,rtspUrl,uName,duid,next){
-  addBroadCast(auth,youtube,uName,duid,function(err,videoId){
+var doLiveStream = function(auth,youtube,cfg,next){
+  var uName = cfg.userName;
+  var duid = cfg.duid;
+  var rtspUrl = cfg.rtspSource;
+  var webhook = cfg.webhook;
+  var retry = cfg.retry;
+  addBroadCast(auth,youtube,uName,duid,cfg.nickName,function(err,videoId){
     console.log('add broad cast end');
     if(err) return next(501,{code:501,msg:'Add event -'+err.message});
     addStream(auth,youtube,uName,duid,function(err,streamConfig){
       if(err) return next(501,{code:501,msg:'Add stream -'+err.message});
       bindStream(auth,youtube,streamConfig.sid,videoId,function(err){
         if(err) return next(501,{code:501,msg:'Bind stream -'+err.message});
-        processStream(auth,youtube,rtspUrl,videoId,streamConfig,function(err,result){
+        processStream(auth,youtube,rtspUrl,retry,webhook,videoId,streamConfig,cfg.nickName,function(err,result){
           //do webhook ...
 
         });
@@ -573,13 +616,13 @@ exports.u2beLive = function(liveCfg,next){
   uName = liveCfg.userName;
   streamSrc = liveCfg.rtspSource;
   duid = liveCfg.duid;
-
+  nName = liveCfg.nickName;
   getAuth(serviceAccount,uToken,function(err,auth){
 
     if(err){
       return next(403,{code:403,msg:err.message});
     }
-    var liveFlag = true;
+    //var liveFlag = true;
     liveCfg.auth = auth;
     getBroadCast(liveCfg, youtube, function (err, cfg) {
       console.log('Error ..:',err );
@@ -593,7 +636,7 @@ exports.u2beLive = function(liveCfg,next){
 
       if(!( cfg && cfg.id )){
         console.log('do live :',streamSrc );
-        doLiveStream(auth,youtube,streamSrc,uName,duid,next);
+        doLiveStream(auth,youtube,liveCfg,next);
       } else {
         vid = cfg.id,sid = cfg.contentDetails.boundStreamId,bdstatus = cfg.status.lifeCycleStatus;
         listStream(auth,youtube,sid,function(err,streams){
@@ -614,11 +657,12 @@ exports.u2beLive = function(liveCfg,next){
             surl : streamUrl,
             status : (bdstatus && bdstatus==bStatus[3])?2:(bdstatus && bdstatus==bStatus[2])?1:0,
             sStatus : stream.status.streamStatus,
-            uname : uName ,
+            uName : uName ,
             duid : duid
           }
           //check live stream than alert network error.
-          processStream(auth,youtube,liveCfg.rtspSource,vid,streamConfig,function(err,result){
+          processStream(auth,youtube,liveCfg.rtspSource,liveCfg.retry,liveCfg.webhook,vid,streamConfig,liveCfg.nickName,
+              function(err,result){
             //do webhook ...
           });
           next(null,{
