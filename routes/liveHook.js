@@ -7,7 +7,8 @@ router.post('/:userid/:duid', function(req, res, next) {
   var result = checkParams('POST',req);
   if(result.code == 200){
     //var cfg = result.msg;
-    console.log(req.params,req.body);
+    //console.log(req.params,req.body);
+    console.log('-----> hook ---->'+req.params + '----->',req.body)
     return res.status(200).send('Change ffmpeg status ok ');
   }else return res.status(result.code).send(result);
 });

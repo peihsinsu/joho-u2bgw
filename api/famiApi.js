@@ -273,20 +273,21 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
   }
   function innerHook(rt){
     try{
+      console.log('#### process hook in FamiAPI:',webhook+'/'+uName+'/'+duid);
+      var hookForm = {
+        userId:streamConfig.uName,
+        duid:streamConfig.duid,
+        result:rt,
+        nickName:nName,
+        retry:retry||0,
+        url : 'https://www.youtube.com/watch?v='+vid,
+        UTCTime : new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')
+      };
       return request.post(webhook+'/'+uName+'/'+duid,
-          {form:{
-            userId:streamConfig.uName,
-            duid:streamConfig.duid,
-            result:rt,
-            nickName:nName,
-            retry:retry||0,
-            url : 'https://www.youtube.com/watch?v='+vid,
-            UTCTime : new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')
-          }},
+          {form:hookForm},
           function(e,r,d){
-            if(e) logger.error(webhook+' --> error:',e);
-            else logger.info(webhook+' --> success',
-                {userName:uName,duid:duid,status:(rt==0?'success':'fail')});
+            if(e) logger.error(webhook+' -->WEB HOOK: '+uName+' error:',e);
+            else logger.info(webhook+' -->WEB HOOK success',hookForm);
           });
     }catch(e){
       logger.error('Error hook error',e);
@@ -314,18 +315,22 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
           //READY , must add broadcast status = testing check
           if (sstatus == 'active') {
             if (streamConfig.status == 1) {
-              transitIt(auth, youtube, bStatus[3], vid, function (err, it) {
-                console.log('-- transit live -->');
-                if (err) {
-                  console.log(err);
-                } else {
-                  streamConfig.status = 2;
-                  clearInterval(iid);
-                }
-              })
+              setTimeout(function () {
+                transitIt(auth, youtube, bStatus[3], vid, function (err, it) {
+                  console.log('-- transit live -->'+vid+'-->',err?'success':'fail');
+                  if (err) {
+                    console.log(err);
+                  } else {
+                    streamConfig.status = 2;
+                    clearInterval(iid);
+                    //do webhook
+                    innerHook(0);
+                  }
+                })
+              },5000);
             } else {
               transitIt(auth, youtube, bStatus[2], vid, function (err, it) {
-                console.log('-- transit tesing -->');
+                console.log('-- transit tesing -->'+vid+'-->',err?'success':'fail');
                 if (err) {
                   console.log(err);
                   return;
@@ -336,7 +341,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
                     if (err) console.log('list broadcast error ...', err);
                     if (bc && bc.items[0].status.lifeCycleStatus == bStatus[2]) {
                       transitIt(auth, youtube, bStatus[3], vid, function (err, it) {
-                        console.log('-- transit live -->');
+                        console.log('-- transit live -->'+vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'success':'fail');
                         if (err) {
                           console.log(err);
                         } else {

@@ -1,7 +1,7 @@
 {
   "retryCfg" : {
     "cnt" : 3,
-    "interval" : 13000,
-    "timeout" : 18000
+    "interval" : 12000,
+    "timeout" : 10000
   }
 }
