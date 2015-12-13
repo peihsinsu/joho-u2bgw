@@ -273,7 +273,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
   }
   function innerHook(rt){
     try{
-      console.log('#### process hook in FamiAPI:',webhook+'/'+uName+'/'+duid);
+      console.log('#### process hook in FamiAPI:',webhook+'/'+streamConfig.uName+'/'+streamConfig.duid);
       var hookForm = {
         userId:streamConfig.uName,
         duid:streamConfig.duid,
@@ -283,10 +283,10 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
         url : 'https://www.youtube.com/watch?v='+vid,
         UTCTime : new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')
       };
-      return request.post(webhook+'/'+uName+'/'+duid,
+      return request.post(webhook+'/'+streamConfig.uName+'/'+streamConfig.duid,
           {form:hookForm},
           function(e,r,d){
-            if(e) logger.error(webhook+' -->WEB HOOK: '+uName+' error:',e);
+            if(e) logger.error(webhook+' -->WEB HOOK: '+streamConfig.uName+' error:',e);
             else logger.info(webhook+' -->WEB HOOK success',hookForm);
           });
     }catch(e){
@@ -317,7 +317,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
             if (streamConfig.status == 1) {
               setTimeout(function () {
                 transitIt(auth, youtube, bStatus[3], vid, function (err, it) {
-                  console.log('-- transit live -->'+vid+'-->',err?'success':'fail');
+                  console.log('-- transit live -->'+vid+'-->',err?'fail':'success');
                   if (err) {
                     console.log(err);
                   } else {
@@ -330,7 +330,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
               },5000);
             } else {
               transitIt(auth, youtube, bStatus[2], vid, function (err, it) {
-                console.log('-- transit tesing -->'+vid+'-->',err?'success':'fail');
+                console.log('-- transit tesing -->'+vid+'-->',err?'fail':'success');
                 if (err) {
                   console.log(err);
                   return;
@@ -341,7 +341,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
                     if (err) console.log('list broadcast error ...', err);
                     if (bc && bc.items[0].status.lifeCycleStatus == bStatus[2]) {
                       transitIt(auth, youtube, bStatus[3], vid, function (err, it) {
-                        console.log('-- transit live -->'+vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'success':'fail');
+                        console.log(streamConfig.uName+'-'+streamConfig.duid,'-- transit live -->'+vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'success':'fail');
                         if (err) {
                           console.log(err);
                         } else {
