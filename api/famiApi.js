@@ -199,13 +199,12 @@ listBroadCast = function( auth, youtube, status, vid, next ){
   if(status) listArg.broadcastStatus = status ;
   else if(vid) listArg.id = vid ;
   else listArg.mine = true;
-  //console.log('List args :',listArg);
   youtube.liveBroadcasts.list( listArg, function(err, broadcasts){
     //console.log('list broads=====>',broadcasts);
     logger.debug('######## step list broadcast-status:'+status+'/vid:'+vid+' or mine .########');
     delete listArg.auth;
     listArg.api = 'Broadcast List';
-    listArg.msg = broadcasts;
+    listArg.msg = '';//broadcasts;
     doLog(err,listArg);
     next(err,broadcasts);
   });
@@ -214,16 +213,12 @@ listBroadCast = function( auth, youtube, status, vid, next ){
 listStream = function(auth,youtube,streamId,next){
   var listArg = {
     part: 'id,snippet,cdn,status',
-    //id : streamId,
-    //mine: true,
     maxResults : 50 ,
     auth:auth
   }
   if(streamId) listArg.id = streamId ;
   else listArg.mine = true;
-  //console.log('List args :',listArg);
   youtube.liveStreams.list(listArg,function(err, streams){
-    //console.log('list stream=====>',streams);
     logger.debug('######## step list stream :'+(streamId?streamId:'mine')+'  .########');
     delete listArg.auth;
     listArg.api = 'Stream List';
@@ -240,7 +235,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
   logger.debug('processStream ...',retryCfg,sStatus[2],streamConfig.sStatus,streamConfig.sStatus != sStatus[2]);
   //判斷是否需ffmpeg
   if(streamConfig.sStatus != sStatus[2]){
-    console.log('#### Process stream ffmpeg http://localhost:3001/processLive ####');
+    console.log('#### Process stream ffmpeg http://localhost:3001/processLive ####',streamConfig.uName);
     request.post('http://localhost:3001/processLive',
         {form:{
             rtspSrc:rtspSrc,
@@ -668,7 +663,7 @@ exports.u2beLive = function(liveCfg,next){
           //check live stream than alert network error.
           processStream(auth,youtube,liveCfg.rtspSource,liveCfg.retry,liveCfg.webhook,vid,streamConfig,liveCfg.nickName,
               function(err,result){
-            //do webhook ...
+                //do webhook ...
           });
           next(null,{
               code : 200,
