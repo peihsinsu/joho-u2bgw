@@ -1,7 +1,18 @@
 var express = require('express');
 var router = express.Router();
 var api = require('../api/famiApi');
+var log4js = require('log4js');
+log4js.configure('./config/log.config', {});
+if(!process.env.NODE_ENV){
+  log4js.addAppender(
+      require('fluent-logger').support.log4jsAppender(
+          'u2bApi',
+          { host: 'localhost', port: 24224, timeout: 3.0}
+      )
+  );
+}
 
+var logger = log4js.getLogger('u2beApi');
 /* GET users listing. */
 router.get('/:userid/:duid', function(req, res, next) {
   console.log ('get ... familive' ,req.params, req.body, req.headers);
@@ -76,7 +87,7 @@ function checkParams(actionType,req){
     liveCfg.retry = req.body.retry;
   }
 
-  console.log('success check params:',liveCfg);
+  logger.log('success check params:',liveCfg);
   return {code:200 ,msg:liveCfg}
 }
 module.exports = router;// JavaScript Document

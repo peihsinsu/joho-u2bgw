@@ -8,6 +8,14 @@ var moment = require('moment');
 var flow = require('async');
 var log4js = require('log4js');
 log4js.configure('./config/log.config', {});
+if(!process.env.NODE_ENV){
+  log4js.addAppender(
+      require('fluent-logger').support.log4jsAppender(
+          'u2bApi',
+          { host: 'localhost', port: 24224, timeout: 3.0}
+      )
+  );
+}
 var logger = log4js.getLogger('u2be-gw');
 var serviceAccount = require('../config/client_secret.json').installed;
 var retryCfg = require('../config/config.json').retryCfg;
@@ -268,7 +276,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
   }
   function innerHook(rt){
     try{
-      console.log('#### process hook in FamiAPI:',webhook+'/'+streamConfig.uName+'/'+streamConfig.duid);
+      console.log('#### process hook in FamiAPI:',webhook+'/commJSON/NS/set_youtube_notification.php');
       var hookForm = {
         userId:streamConfig.uName,
         duid:streamConfig.duid,
@@ -278,7 +286,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
         url : 'https://www.youtube.com/watch?v='+vid,
         UTCTime : new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')
       };
-      return request.post(webhook+'/'+streamConfig.uName+'/'+streamConfig.duid,
+      return request.post(webhook+'/commJSON/NS/set_youtube_notification.php',
           {form:hookForm},
           function(e,r,d){
             if(e) logger.error(webhook+' -->WEB HOOK: '+streamConfig.uName+' error:',e);
