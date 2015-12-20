@@ -12,9 +12,9 @@ var videoId = '';
 var streamId = '';
 var streamUrl = '';
 
-var CLIENT_ID = '161639684388-6c8utml7h4f05qv02m90721butpktt4l.apps.googleusercontent.com';
+var CLIENT_ID = '';
 
-var CLIENT_SECRET = 'KLzPuIuqbe1za7ueQMr_c1hj';
+var CLIENT_SECRET = '';
 var REDIRECT_URI = 'urn:ietf:wg:oauth:2.0:oob';
 var getAccessToken = function(auth,next){
 	url = auth.generateAuthUrl({

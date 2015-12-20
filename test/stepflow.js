@@ -1,9 +1,9 @@
 /**
  * Created by sunnyhu on 15/10/25.
  */
-var sunny_tokens = { access_token: 'ya29.FwJb7fnGJiPtO1m3ny7_2yAvPRmn97gthV9gnskBrsfKrmoaLO95nMjQnR4SVaehYocr',
+var sunny_tokens = { access_token: '',
   token_type: 'Bearer',
-  refresh_token: '1/emzknGU5W_ZmE0Yzwo0DMLKve6cSrQ0sc92yzNRf7qU',
+  refresh_token: '',
   expiry_date: 1445793271091 };
 
 (function() {
@@ -19,14 +19,11 @@ var sunny_tokens = { access_token: 'ya29.FwJb7fnGJiPtO1m3ny7_2yAvPRmn97gthV9gnsk
   videoId = '';
   streamId = '';
   streamUrl = '';
-  /*sunny54573這是您的用戶端 ID
-   516742858450-a33kmlfflsjo1kqj9khcpjfefak272hn.apps.googleusercontent.com
-   您的用戶端密鑰如下
-   RvqFbHgXvEwG4prcDVccaB-B*/
-  CLIENT_ID = '516742858450-a33kmlfflsjo1kqj9khcpjfefak272hn.apps.googleusercontent.com';
-  //'161639684388-6c8utml7h4f05qv02m90721butpktt4l.apps.googleusercontent.com';
-  CLIENT_SECRET = 'RvqFbHgXvEwG4prcDVccaB-B';
-  //'KLzPuIuqbe1za7ueQMr_c1hj';
+  
+  CLIENT_ID = '';
+  
+  CLIENT_SECRET = '';
+  
   REDIRECT_URI = 'urn:ietf:wg:oauth:2.0:oob';
   getAccessToken = function (auth, next) {
     var url;

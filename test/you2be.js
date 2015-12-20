@@ -13,9 +13,9 @@ var ffmpeg = require('fluent-ffmpeg');
   videoId = '';
   streamId = '';
   streamUrl = '';
-  CLIENT_ID = '161639684388-6c8utml7h4f05qv02m90721butpktt4l.apps.googleusercontent.com';
+  CLIENT_ID = '';
 
-  CLIENT_SECRET = 'KLzPuIuqbe1za7ueQMr_c1hj';
+  CLIENT_SECRET = '';
   REDIRECT_URI = 'urn:ietf:wg:oauth:2.0:oob';
   getAccessToken = function(auth, next){
     var url;

@@ -86,8 +86,13 @@ function checkParams(actionType,req){
   if(req.body.retry){
     liveCfg.retry = req.body.retry;
   }
+  if(req.body.isWarmup && req.body.isWarmup == 'Y'){
+    liveCfg.isWarmup = true;
+  }else if(actionType=='POST'){
+    liveCfg.isWarmup = false;
+  }
 
-  logger.log('success check params:',liveCfg);
+  logger.debug('success check params:',liveCfg);
   return {code:200 ,msg:liveCfg}
 }
 module.exports = router;// JavaScript Document

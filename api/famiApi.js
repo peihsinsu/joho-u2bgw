@@ -236,11 +236,11 @@ listStream = function(auth,youtube,streamId,next){
   });
 };
 
-processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nName,next){
+processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nName,isWarmup,next){
   streamConfig.vid = vid;
   var iid ='';
   var isFerr = false;
-  logger.debug('processStream ...',retryCfg,sStatus[2],streamConfig.sStatus,streamConfig.sStatus != sStatus[2]);
+  logger.debug('processStream ...',isWarmup,retryCfg,sStatus[2],streamConfig.sStatus,streamConfig.sStatus != sStatus[2]);
   //判斷是否需ffmpeg
   if(streamConfig.sStatus != sStatus[2]){
     console.log('#### Process stream ffmpeg http://localhost:3001/processLive ####',streamConfig.uName);
@@ -253,7 +253,8 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
             webhook:webhook,
             retry:retry,
             nickName : nName,
-            url : 'https://www.youtube.com/watch?v='+vid
+            url : 'https://www.youtube.com/watch?v='+vid,
+            isWarmup : isWarmup
           }
         },function(e,r,d) {
           console.log('ffmpeg response : ',e,d);
@@ -273,10 +274,13 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
           }
         });
 
+  }else{
+    next(null, 'ffmpeg has already start' );
   }
+
   function innerHook(rt){
     try{
-      console.log('#### process hook in FamiAPI:',webhook+'/commJSON/NS/set_youtube_notification.php');
+      console.log('#### process hook in FamiAPI:',webhook+'/commJSON/NS/set_youtube_notification.php','isWarmup:',isWarmup);
       var hookForm = {
         userId:streamConfig.uName,
         duid:streamConfig.duid,
@@ -296,17 +300,21 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
       logger.error('Error hook error',e);
     }
   }
+
   //Transit depend on bdstatus ...
   var retryCnt = 0;
+  var testStarting = '';
   if(streamConfig.status==2 && retryCnt == 0 && !isFerr){
     innerHook(0);
   }
+  //計時
   iid = setInterval(function () {
     //重覆三次都錯
     if(streamConfig.status!=2 && retryCnt == retryCfg.cnt){
       innerHook(1);
     }
-    if ((streamConfig.status == 0 || streamConfig.status == 1) && retryCnt < retryCfg.cnt) {
+    if ((streamConfig.status == 0 || streamConfig.status == 1 )
+        && retryCnt < retryCfg.cnt ) {
       listStream(auth, youtube, streamConfig.sid, function (err, stream) {
         retryCnt += 1;
         //see status ...
@@ -317,28 +325,9 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
               retryCnt, item.status, sstatus == sStatus[1], streamConfig.status);
           //READY , must add broadcast status = testing check
           if (sstatus == 'active') {
-            if (streamConfig.status == 1) {
-              setTimeout(function () {
-                transitIt(auth, youtube, bStatus[3], vid, function (err, it) {
-                  console.log('-- transit live -->'+vid+'-->',err?'fail':'success');
-                  if (err) {
-                    console.log(err);
-                  } else {
-                    streamConfig.status = 2;
-                    clearInterval(iid);
-                    //do webhook
-                    innerHook(0);
-                  }
-                })
-              },5000);
-            } else {
-              transitIt(auth, youtube, bStatus[2], vid, function (err, it) {
-                console.log('-- transit tesing -->'+vid+'-->',err?'fail':'success');
-                if (err) {
-                  console.log(err);
-                  return;
-                }
-                streamConfig.status = 1;
+            if (streamConfig.status == 1 ) {
+              //warm up do not transit it as live
+              if(!isWarmup){
                 setTimeout(function () {
                   listBroadCast(auth, youtube, null, vid, function (err, bc) {
                     if (err) console.log('list broadcast error ...', err);
@@ -356,8 +345,22 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
                       })
                     }
                   });
-                }, retryCfg.timeout);
-                //}
+                }, (testStarting?retryCfg.timeout:1000));
+              } else {
+                clearInterval(iid);
+              }
+            } else if(streamConfig.status != 1 ){
+              transitIt(auth, youtube, bStatus[2], vid, function (err, it) {
+                console.log('-- transit tesing -->'+vid+'-->',err?'fail':'success');
+                if (err) {
+                  console.log(err);
+                  return;
+                }
+                streamConfig.status = 1;
+                testStarting = '1';
+                if(isWarmup){
+                  clearInterval(iid);
+                }
               });
             }
           }
@@ -597,18 +600,47 @@ var doLiveStream = function(auth,youtube,cfg,next){
       if(err) return next(501,{code:501,msg:'Add stream -'+err.message});
       bindStream(auth,youtube,streamConfig.sid,videoId,function(err){
         if(err) return next(501,{code:501,msg:'Bind stream -'+err.message});
-        processStream(auth,youtube,rtspUrl,retry,webhook,videoId,streamConfig,cfg.nickName,function(err,result){
-          //do webhook ...
-
+        processStream(auth,
+            youtube,
+            rtspUrl,
+            retry,
+            webhook,
+            videoId,
+            streamConfig,
+            cfg.nickName,
+            cfg.isWarmup,
+            function(err,result){
+              //do webhook ...
+              if( cfg.isWarmup && !err ){
+                next(null,{
+                  code : 200,
+                  msg : 'Success',
+                  eventId : videoId,
+                  url : 'https://www.youtube.com/watch?v='+videoId,
+                  eventStatus : 'ready',
+                  isWarmup : 'Y'
+                });
+              }else if( cfg.isWarmup && err ){
+                next(null,{
+                  code : 500,
+                  msg : 'fail:'+err,
+                  eventId : videoId,
+                  url : 'https://www.youtube.com/watch?v='+videoId,
+                  eventStatus : 'ready',
+                  isWarmup : 'Y'
+                });
+              }
         });
-        next(null,{
-          code : 200,
-          msg : 'Success',
-          eventId : videoId,
-          url : 'https://www.youtube.com/watch?v='+videoId,
-          eventStatus : 'ready'
-        });
-
+        if(!cfg.isWarmup){
+          next(null,{
+            code : 200,
+            msg : 'Success',
+            eventId : videoId,
+            url : 'https://www.youtube.com/watch?v='+videoId,
+            eventStatus : 'ready',
+            isWarmup : 'N'
+          });
+        }
       });
     });
   });
@@ -669,18 +701,40 @@ exports.u2beLive = function(liveCfg,next){
             duid : duid
           }
           //check live stream than alert network error.
-          processStream(auth,youtube,liveCfg.rtspSource,liveCfg.retry,liveCfg.webhook,vid,streamConfig,liveCfg.nickName,
+          processStream(auth,youtube,liveCfg.rtspSource,liveCfg.retry,
+              liveCfg.webhook,vid,streamConfig,liveCfg.nickName,liveCfg.isWarmup,
               function(err,result){
                 //do webhook ...
+                if( liveCfg.isWarmup && !err ){
+                  next(null,{
+                    code : 200,
+                    msg : 'Success',
+                    eventId : vid,
+                    url : 'https://www.youtube.com/watch?v='+vid,
+                    eventStatus : bdstatus,
+                    isWarmup : 'Y'
+                  });
+                }else if( liveCfg.isWarmup && err ){
+                  next(null,{
+                    code : 500,
+                    msg : 'fail:'+err,
+                    eventId : vid,
+                    url : 'https://www.youtube.com/watch?v='+vid,
+                    eventStatus : bdstatus,
+                    isWarmup : 'Y'
+                  });
+                }
           });
-          next(null,{
+          if(!liveCfg.isWarmup){
+            next(null,{
               code : 200,
               msg : 'Success',
               eventId : vid,
               url : 'https://www.youtube.com/watch?v='+vid,
-              eventStatus : bdstatus
-          });
-
+              eventStatus : bdstatus,
+              isWarmup : 'N'
+            });
+          }
         });
       }
     });

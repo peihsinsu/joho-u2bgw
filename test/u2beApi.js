@@ -14,17 +14,17 @@ var streamStatus = {
   4 : 'complete'
 };
 var sunnyToken = {
-  access_token: 'ya29.FwJb7fnGJiPtO1m3ny7_2yAvPRmn97gthV9gnskBrsfKrmoaLO95nMjQnR4SVaehYocr',
+  access_token: '',
   token_type: 'Bearer',
-  refresh_token: '1/emzknGU5W_ZmE0Yzwo0DMLKve6cSrQ0sc92yzNRf7qU',
+  refresh_token: '',
   expiry_date: 1445793271091
 };
 
 //'161639684388-6c8utml7h4f05qv02m90721butpktt4l.apps.googleusercontent.com';
 //'KLzPuIuqbe1za7ueQMr_c1hj';
 var serviceAccount = {
-  client_id:'516742858450-a33kmlfflsjo1kqj9khcpjfefak272hn.apps.googleusercontent.com',
-  client_secret:'RvqFbHgXvEwG4prcDVccaB-B',
+  client_id:'',
+  client_secret:'',
   redirect_uri :'urn:ietf:wg:oauth:2.0:oob'
 }
 
