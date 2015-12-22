@@ -17,6 +17,14 @@ var logger = log4js.getLogger('u2beApi');
 router.get('/:userid/:duid', function(req, res, next) {
   console.log ('get ... familive' ,req.params, req.body, req.headers);
   var result = checkParams('GET',req);
+  logger.debug(JSON.stringify(
+      { user:req.params.userid,
+        duid:req.params.duid,
+        action:'GET_LIVE_INFO',
+        result:result.code==200?'SUCCESS':'FAIL',
+        returnObj:liveCfg,
+        headers : req.headers
+      }));
   console.log('++++++',result);
   if(result.code == 200){
     var cfg = result.msg;
@@ -31,6 +39,15 @@ router.get('/:userid/:duid', function(req, res, next) {
 }).post('/:userid/:duid', function(req, res, next) {
   console.log ('post... familive' ,req.params, req.body, req.headers);
   var result = checkParams('POST',req);
+  logger.debug(JSON.stringify(
+      { user:req.params.userid,
+        duid:req.params.duid,
+        action:'POST_LIVE_EVENT',
+        result:result.code==200?'SUCCESS':'FAIL',
+        returnObj:result,
+        headers : req.headers,
+        body : req.body
+      }));
   if(result.code == 200){
     var cfg = result.msg;
     //do live stream with cfg
@@ -91,8 +108,6 @@ function checkParams(actionType,req){
   }else if(actionType=='POST'){
     liveCfg.isWarmup = false;
   }
-
-  logger.debug('success check params:',liveCfg);
   return {code:200 ,msg:liveCfg}
 }
 module.exports = router;// JavaScript Document

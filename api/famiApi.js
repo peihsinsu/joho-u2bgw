@@ -244,28 +244,41 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
   //判斷是否需ffmpeg
   if(streamConfig.sStatus != sStatus[2]){
     console.log('#### Process stream ffmpeg http://localhost:3001/processLive ####',streamConfig.uName);
+    var ffmpegForm = {
+      rtspSrc:rtspSrc,
+      uName:streamConfig.uName,
+      duid:streamConfig.duid,
+      surl:streamConfig.surl,
+      webhook:webhook,
+      retry:retry,
+      nickName : nName,
+      url : 'https://www.youtube.com/watch?v='+vid,
+      isWarmup : isWarmup
+    };
     request.post('http://localhost:3001/processLive',
-        {form:{
-            rtspSrc:rtspSrc,
-            uName:streamConfig.uName,
-            duid:streamConfig.duid,
-            surl:streamConfig.surl,
-            webhook:webhook,
-            retry:retry,
-            nickName : nName,
-            url : 'https://www.youtube.com/watch?v='+vid,
-            isWarmup : isWarmup
-          }
-        },function(e,r,d) {
+        {
+          form:ffmpegForm
+        },
+        function(e,r,d) {
           console.log('ffmpeg response : ',e,d);
           streamConfig.api = 'ffmpeg post';
+          var logInfo = {
+            user:ffmpegForm.uName,
+            duid:ffmpegForm.duid,
+            action:'FFMPEG',
+            URL :'http://localhost:3001/processLive',
+            result:(e?'FAIL':'SUCCESS'),
+            body:ffmpegForm,
+            returnObj:(e?e:{})};
           if (e) {
             streamConfig.msg = d;
             console.log('ffmpeg error :', e);
-            doLog(e, streamConfig);
+            //doLog(e, streamConfig);
             isFerr = true;
+            logger.error(JSON.stringify(logInfo));
           } else {
-            doLog(null, streamConfig);
+            //doLog(null, streamConfig);
+            logger.info(JSON.stringify(logInfo));
             try {
               next(null, 'ffmpeg start:' + d.cmd);
             } catch (e) {
@@ -280,7 +293,8 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
 
   function innerHook(rt){
     try{
-      console.log('#### process hook in FamiAPI:',webhook+'/commJSON/NS/set_youtube_notification.php','isWarmup:',isWarmup);
+      var hookURL = webhook+'/commJSON/NS/set_youtube_notification.php';//webhook+'/sunny/ABCD'
+      console.log('#### process hook in FamiAPI:',hookURL,'isWarmup:',isWarmup);
       var hookForm = {
         userId:streamConfig.uName,
         duid:streamConfig.duid,
@@ -290,12 +304,38 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
         url : 'https://www.youtube.com/watch?v='+vid,
         UTCTime : new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')
       };
-      return request.post(webhook+'/commJSON/NS/set_youtube_notification.php',
+      var options = {
+        uri: hookURL,
+        method: 'POST',
+        json: hookForm
+      };
+      return request(options,
+          function(e,r,d){
+            var logInfo = {
+              user:hookForm.userId,
+              duid:hookForm.duid,
+              action:'WEBHOOK_TRANSIT',
+              URL :hookURL,
+              result:(e?'FAIL':'SUCCESS'),
+              body:hookForm,
+              returnObj:e}
+            if(e) logger.error(JSON.stringify(logInfo));
+            else logger.info(JSON.stringify(logInfo));
+          });
+      /*return request.post(hookURL,
           {form:hookForm},
           function(e,r,d){
-            if(e) logger.error(webhook+' -->WEB HOOK: '+streamConfig.uName+' error:',e);
-            else logger.info(webhook+' -->WEB HOOK success',hookForm);
-          });
+            var logInfo = {
+              user:hookForm.userId,
+              duid:hookForm.duid,
+              action:'WEBHOOK_TRANSIT',
+              URL :hookURL,
+              result:(e?'FAIL':'SUCCESS'),
+              body:hookForm,
+              returnObj:e}
+            if(e) logger.error(JSON.stringify(logInfo));
+            else logger.info(JSON.stringify(logInfo));
+          });*/
     }catch(e){
       logger.error('Error hook error',e);
     }
