@@ -1,14 +1,27 @@
 var express = require('express');
 var router = express.Router();
+var log4js = require('log4js');
+log4js.configure('./config/log.config', {});
+if(!process.env.NODE_ENV){
+  log4js.addAppender(
+      require('fluent-logger').support.log4jsAppender(
+          'u2bApi',
+          { host: 'localhost', port: 24224, timeout: 3.0}
+      )
+  );
+}
+var logger = log4js.getLogger('u2be-gw');
 
 /* GET users listing. */
-router.post('/:userid/:duid', function(req, res, next) {
-  console.log ('hook-process-status:' ,req.params, req.body, req.headers);
-  var result = checkParams('POST',req);
+router.post('/', function(req, res, next) {
+  //console.log ('hook-process-status:' ,req.params, req.body, req.headers);
+  var result = {code:200} //checkParams('POST',req);
+
   if(result.code == 200){
     //var cfg = result.msg;
     //console.log(req.params,req.body);
-    console.log('-----> hook ---->'+req.params + '----->',req.body)
+    console.log('-----> hook ---->'+req.params + '----->',req.body);
+    logger.info(JSON.stringify(req.body));
     return res.status(200).send('Change ffmpeg status ok ');
   }else return res.status(result.code).send(result);
 });

@@ -18,7 +18,9 @@ if(!process.env.NODE_ENV){
 }
 var logger = log4js.getLogger('u2be-gw');
 var serviceAccount = require('../config/client_secret.json').installed;
-var retryCfg = require('../config/config.json').retryCfg;
+var fcfg = require('../config/config.json');
+var retryCfg = fcfg.retryCfg;
+
 var request = require('request');
 var bStatus = {
   0 : 'created',
@@ -35,6 +37,8 @@ var sStatus = {
   2 : 'active',
   3 : 'inactive'
 }
+var k8s = fcfg.k8s;
+var logUrl = fcfg.logBack;
 
 getAuth = function(secretStore,tokenStore,next){
   var auth = new googleapis.auth.OAuth2(
@@ -253,12 +257,20 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
       retry:retry,
       nickName : nName,
       url : 'https://www.youtube.com/watch?v='+vid,
-      isWarmup : isWarmup
+      isWarmup : isWarmup,
+      logUrl : logUrl || 'http://localhost:3000/liveHook'
     };
-    request.post('http://localhost:3001/processLive',
+    var options = {
+      uri: k8s || 'http://localhost:3001/processLive',
+      method: 'POST',
+      json: ffmpegForm
+    };
+    request.post(
+        /*'http://localhost:3001/processLive',
         {
           form:ffmpegForm
-        },
+        }*/
+        options,
         function(e,r,d) {
           console.log('ffmpeg response : ',e,d);
           streamConfig.api = 'ffmpeg post';

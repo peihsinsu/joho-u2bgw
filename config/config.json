@@ -3,5 +3,7 @@
     "cnt" : 6,
     "interval" : 6000,
     "timeout" : 5000
-  }
+  },
+  "k8s" : "",
+  "logBack" : ""
 }
