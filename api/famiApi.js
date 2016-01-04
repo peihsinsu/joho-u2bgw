@@ -385,7 +385,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
                     if (err) console.log('list broadcast error ...', err);
                     if (bc && bc.items[0].status.lifeCycleStatus == bStatus[2]) {
                       transitIt(auth, youtube, bStatus[3], vid, function (err, it) {
-                        console.log(streamConfig.uName+'-'+streamConfig.duid,'-- transit live -->'+vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'success':'fail');
+                        console.log(streamConfig.uName+'-'+streamConfig.duid,'-- transit live -->'+vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'fail':'success');
                         if (err) {
                           console.log(err);
                         } else {
@@ -401,7 +401,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
               } else {
                 clearInterval(iid);
               }
-            } else if(streamConfig.status != 1 ){
+            } else if(streamConfig.status != 1 && !testStarting){
               transitIt(auth, youtube, bStatus[2], vid, function (err, it) {
                 console.log('-- transit tesing -->'+vid+'-->',err?'fail':'success');
                 if (err) {
