@@ -5,5 +5,6 @@
     "timeout" : 5000
   },
   "k8s" : "http://vg-simon-test:3330/u2b/job",
+  "k8s-prd":"",
   "logBack" : "http://104.199.134.169:3000/liveHook"
 }

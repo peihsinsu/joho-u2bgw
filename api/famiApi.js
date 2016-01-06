@@ -244,6 +244,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
   streamConfig.vid = vid;
   var iid ='';
   var isFerr = false;
+  var canTransit = false;
   logger.debug('processStream ...',isWarmup,retryCfg,sStatus[2],streamConfig.sStatus,streamConfig.sStatus != sStatus[2]);
   //判斷是否需ffmpeg
   if(streamConfig.sStatus != sStatus[2]){
@@ -256,7 +257,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
       webhook:webhook,
       retry:retry,
       nickName : nName,
-      url : 'https://www.youtube.com/watch?v='+vid,
+      url : 'https://www.youtube.com/watch?v='+vid ,//+'&'+streamConfig.sid+'&'+streamConfig.status,
       isWarmup : isWarmup,
       logUrl : logUrl || 'http://localhost:3000/liveHook'
     };
@@ -290,6 +291,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
             logger.error(JSON.stringify(logInfo));
           } else {
             //doLog(null, streamConfig);
+            canTransit = true;
             logger.info(JSON.stringify(logInfo));
             try {
               next(null, 'ffmpeg start:' + d.cmd);
@@ -301,7 +303,30 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
 
   }else{
     next(null, 'ffmpeg has already start' );
+    //doTransit
+    canTransit = true;
   }
+  var wCnt = 0;
+  flow.doUntil(
+      function (callback) {
+        wCnt++;
+        setTimeout(function () {
+          console.log('Wait transit',canTransit,wCnt);
+          callback(null, canTransit);
+        }, 1000);
+      },
+      function () { return canTransit||isFerr||wCnt>99; },
+      function (err, n) {
+
+        if(!err){
+          if(isFerr){
+            innerHook(1);
+          }else
+            innerTransit();
+        }
+      }
+
+  );
 
   function innerHook(rt){
     try{
@@ -335,7 +360,137 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
             else logger.info(JSON.stringify(logInfo));
           });
       /*return request.post(hookURL,
-          {form:hookForm},
+       {form:hookForm},
+       function(e,r,d){
+       var logInfo = {
+       user:hookForm.userId,
+       duid:hookForm.duid,
+       action:'WEBHOOK_TRANSIT',
+       URL :hookURL,
+       result:(e?'FAIL':'SUCCESS'),
+       body:hookForm,
+       returnObj:e}
+       if(e) logger.error(JSON.stringify(logInfo));
+       else logger.info(JSON.stringify(logInfo));
+       });*/
+    }catch(e){
+      logger.error('Error hook error',e);
+    }
+  }
+  //Transit depend on bdstatus ... and env TRANSIT_MODE == LOCALHOST
+  //20151205 change it to docker run and callback do transit ...
+  //if( process.env.TRANSIT_MODE == 'LOCALHOST'){
+  function innerTransit(){
+    //--
+    var retryCnt = 0;
+    var testStarting = '';
+    if(streamConfig.status==2 && retryCnt == 0 && !isFerr){
+      innerHook(0);
+    }
+    //計時
+    iid = setInterval(function () {
+      //重覆三次都錯
+      if(streamConfig.status!=2 && retryCnt == retryCfg.cnt){
+        innerHook(1);
+      }
+      if ((streamConfig.status == 0 || streamConfig.status == 1 )
+          && retryCnt < retryCfg.cnt ) {
+        listStream(auth, youtube, streamConfig.sid, function (err, stream) {
+          retryCnt += 1;
+          //see status ...
+          for (var i = 0; i < stream.items.length; i++) {
+            var item = stream.items[i];
+            var sstatus = item.status.streamStatus;
+            console.log('transit------->:',
+                retryCnt, item.status, sstatus == sStatus[1], streamConfig.status);
+            //READY , must add broadcast status = testing check
+            if (sstatus == 'active') {
+              if (streamConfig.status == 1 ) {
+                //warm up do not transit it as live
+                if(!isWarmup){
+                  setTimeout(function () {
+                    listBroadCast(auth, youtube, null, vid, function (err, bc) {
+                      if (err) console.log('list broadcast error ...', err);
+                      if (bc && bc.items[0].status.lifeCycleStatus == bStatus[2]) {
+                        transitIt(auth, youtube, bStatus[3], vid, function (err, it) {
+                          console.log(streamConfig.uName+'-'+streamConfig.duid,'-- transit live -->'+vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'fail':'success');
+                          if (err) {
+                            console.log(err);
+                          } else {
+                            streamConfig.status == 2;
+                            clearInterval(iid);
+                            //do webhook
+                            innerHook(0);
+                          }
+                        })
+                      }
+                    });
+                  }, (testStarting?retryCfg.timeout:1000));
+                } else {
+                  clearInterval(iid);
+                }
+              } else if(streamConfig.status != 1 && !testStarting){
+                transitIt(auth, youtube, bStatus[2], vid, function (err, it) {
+                  console.log('-- transit tesing -->'+vid+'-->',err?'fail':'success');
+                  if (err) {
+                    console.log(err);
+                    return;
+                  }
+                  streamConfig.status = 1;
+                  testStarting = '1';
+                  if(isWarmup){
+                    clearInterval(iid);
+                  }
+                });
+              }
+            }
+          }
+        });
+      } else clearInterval(iid);
+    }, retryCfg.interval);
+    //--
+  }
+
+}
+/**
+ * tcfg = {
+      uName:streamConfig.uName,
+      duid:streamConfig.duid,
+      webhook:webhook,
+      retry:retry,
+      nickName : nName,
+      url : 'https://www.youtube.com/watch?v='+vid +'&'+streamConfig.sid+'&'+streamConfig.status,
+      isWarmup : isWarmup,
+      vid
+      sid :
+      status :
+      isFerr
+ * }
+ * ISSUE : OAuth can't pass , if ffmpeg process is dead and never post back to user.
+ * @param tcfg
+ */
+
+exports.transitApi = function(tcfg){
+
+  function innerHook(rt){
+    try{
+      var hookURL = tcfg.webhook+'/commJSON/NS/set_youtube_notification.php';//webhook+'/sunny/ABCD'
+      console.log('#### process hook in FamiAPI:',hookURL,'isWarmup:',tcfg.isWarmup);
+      var hookForm = {
+        userId:tcfg.uName,
+        duid:tcfg.duid,
+        result:rt,
+        nickName:tcfg.nickName,
+        retry:tcfg.retry||0,
+        url : tcfg.url,
+        UTCTime : new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '')
+      };
+      var options = {
+        uri: hookURL,
+        method: 'POST',
+        json: hookForm
+      };
+      return request(options,
           function(e,r,d){
             var logInfo = {
               user:hookForm.userId,
@@ -347,7 +502,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
               returnObj:e}
             if(e) logger.error(JSON.stringify(logInfo));
             else logger.info(JSON.stringify(logInfo));
-          });*/
+          });
     }catch(e){
       logger.error('Error hook error',e);
     }
@@ -356,40 +511,40 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
   //Transit depend on bdstatus ...
   var retryCnt = 0;
   var testStarting = '';
-  if(streamConfig.status==2 && retryCnt == 0 && !isFerr){
+  if(tcfg.status==2 && retryCnt == 0 && tcfg.isFerr!='true'){
     innerHook(0);
   }
   //計時
   iid = setInterval(function () {
     //重覆三次都錯
-    if(streamConfig.status!=2 && retryCnt == retryCfg.cnt){
+    if(tcfg.status!=2 && retryCnt == retryCfg.cnt){
       innerHook(1);
     }
-    if ((streamConfig.status == 0 || streamConfig.status == 1 )
+    if ((tcfg.status == 0 || tcfg.status == 1 )
         && retryCnt < retryCfg.cnt ) {
-      listStream(auth, youtube, streamConfig.sid, function (err, stream) {
+      listStream(auth, youtube, tcfg.sid, function (err, stream) {
         retryCnt += 1;
         //see status ...
         for (var i = 0; i < stream.items.length; i++) {
           var item = stream.items[i];
           var sstatus = item.status.streamStatus;
           console.log('transit------->:',
-              retryCnt, item.status, sstatus == sStatus[1], streamConfig.status);
+              retryCnt, item.status, sstatus == sStatus[1], tcfg.status);
           //READY , must add broadcast status = testing check
           if (sstatus == 'active') {
-            if (streamConfig.status == 1 ) {
+            if (tcfg.status == 1 ) {
               //warm up do not transit it as live
-              if(!isWarmup){
+              if(isWarmup=='false'){
                 setTimeout(function () {
                   listBroadCast(auth, youtube, null, vid, function (err, bc) {
                     if (err) console.log('list broadcast error ...', err);
                     if (bc && bc.items[0].status.lifeCycleStatus == bStatus[2]) {
                       transitIt(auth, youtube, bStatus[3], vid, function (err, it) {
-                        console.log(streamConfig.uName+'-'+streamConfig.duid,'-- transit live -->'+vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'fail':'success');
+                        console.log(tcfg.uName+'-'+tcfg.duid,'-- transit live -->'+vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'fail':'success');
                         if (err) {
                           console.log(err);
                         } else {
-                          streamConfig.status == 2;
+                          tcfg.status == 2;
                           clearInterval(iid);
                           //do webhook
                           innerHook(0);
@@ -401,16 +556,16 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
               } else {
                 clearInterval(iid);
               }
-            } else if(streamConfig.status != 1 && !testStarting){
-              transitIt(auth, youtube, bStatus[2], vid, function (err, it) {
-                console.log('-- transit tesing -->'+vid+'-->',err?'fail':'success');
+            } else if(tcfg.status != 1 && !testStarting){
+              transitIt(auth, youtube, bStatus[2], tcfg.vid, function (err, it) {
+                console.log('-- transit tesing -->'+tcfg.vid+'-->',err?'fail':'success');
                 if (err) {
                   console.log(err);
                   return;
                 }
-                streamConfig.status = 1;
+                tcfg.status = 1;
                 testStarting = '1';
-                if(isWarmup){
+                if(tcfg.isWarmup=='true'){
                   clearInterval(iid);
                 }
               });

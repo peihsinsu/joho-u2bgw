@@ -11,8 +11,25 @@ if(!process.env.NODE_ENV){
   );
 }
 var logger = log4js.getLogger('u2be-gw');
-
-/* GET users listing. */
+//var tObj = require('../api/famiApi');
+/**
+ * tcfg = {
+      uName:streamConfig.uName,
+      duid:streamConfig.duid,
+      webhook:webhook,
+      retry:retry,
+      nickName : nName,
+      url : 'https://www.youtube.com/watch?v='+vid +'&'+streamConfig.sid+'&'+streamConfig.status,
+      isWarmup : isWarmup,
+      ---------------------
+      vid
+      sid :
+      status :
+      isFerr :
+      action :
+      result : 'START','END
+ * }
+ */
 router.post('/', function(req, res, next) {
   //console.log ('hook-process-status:' ,req.params, req.body, req.headers);
   var result = {code:200} //checkParams('POST',req);
@@ -21,6 +38,9 @@ router.post('/', function(req, res, next) {
     //var cfg = result.msg;
     //console.log(req.params,req.body);
     console.log('-----> hook ---->'+req.params + '----->',req.body);
+    /*if(req.body.result=='START'){
+      tObj.transitApi(req.body);
+    }*/
     logger.info(JSON.stringify(req.body));
     return res.status(200).send('Change ffmpeg status ok ');
   }else return res.status(result.code).send(result);
