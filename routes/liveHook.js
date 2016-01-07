@@ -11,7 +11,7 @@ if(!process.env.NODE_ENV){
   );
 }
 var logger = log4js.getLogger('u2be-gw');
-//var tObj = require('../api/famiApi');
+var tObj = require('../api/famiApi');
 /**
  * tcfg = {
       uName:streamConfig.uName,
@@ -28,6 +28,7 @@ var logger = log4js.getLogger('u2be-gw');
       isFerr :
       action :
       result : 'START','END
+      auth
  * }
  */
 router.post('/', function(req, res, next) {
@@ -38,9 +39,9 @@ router.post('/', function(req, res, next) {
     //var cfg = result.msg;
     //console.log(req.params,req.body);
     console.log('-----> hook ---->'+req.params + '----->',req.body);
-    /*if(req.body.result=='START'){
+    if(req.body.result=='START'){
       tObj.transitApi(req.body);
-    }*/
+    }
     logger.info(JSON.stringify(req.body));
     return res.status(200).send('Change ffmpeg status ok ');
   }else return res.status(result.code).send(result);

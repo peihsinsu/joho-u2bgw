@@ -50,7 +50,10 @@ getAuth = function(secretStore,tokenStore,next){
   console.log('auth -----------------------');
   console.log('auth look like:',auth);
   console.log('auth -----------------------');
-  next(null,auth);
+  if(next)
+    next(null,auth);
+  else
+    return auth;
 }
 
 transitIt = function (auth,youtube, status, videoId, next) {
@@ -248,7 +251,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
   logger.debug('processStream ...',isWarmup,retryCfg,sStatus[2],streamConfig.sStatus,streamConfig.sStatus != sStatus[2]);
   //判斷是否需ffmpeg
   if(streamConfig.sStatus != sStatus[2]){
-    console.log('#### Process stream ffmpeg http://localhost:3001/processLive ####',streamConfig.uName);
+    console.log('#### Process stream ffmpeg http://localhost:3001/processLiveV1 ####',streamConfig.uName);
     var ffmpegForm = {
       rtspSrc:rtspSrc,
       uName:streamConfig.uName,
@@ -257,12 +260,15 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
       webhook:webhook,
       retry:retry,
       nickName : nName,
-      url : 'https://www.youtube.com/watch?v='+vid ,//+'&'+streamConfig.sid+'&'+streamConfig.status,
+      url : 'https://www.youtube.com/watch?v='+vid +'&'+streamConfig.sid+'&'+streamConfig.status,
       isWarmup : isWarmup,
       logUrl : logUrl || 'http://localhost:3000/liveHook'
     };
     var options = {
       uri: k8s || 'http://localhost:3001/processLive',
+      headers:{
+        Authorization: auth.credentials.access_token
+      },
       method: 'POST',
       json: ffmpegForm
     };
@@ -279,7 +285,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
             user:ffmpegForm.uName,
             duid:ffmpegForm.duid,
             action:'FFMPEG',
-            URL :'http://localhost:3001/processLive',
+            URL :options.uri,
             result:(e?'FAIL':'SUCCESS'),
             body:ffmpegForm,
             returnObj:(e?e:{})};
@@ -306,27 +312,30 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
     //doTransit
     canTransit = true;
   }
-  var wCnt = 0;
-  flow.doUntil(
-      function (callback) {
-        wCnt++;
-        setTimeout(function () {
-          console.log('Wait transit',canTransit,wCnt);
-          callback(null, canTransit);
-        }, 1000);
-      },
-      function () { return canTransit||isFerr||wCnt>99; },
-      function (err, n) {
+  if(process.env.TRANSIT){
+    var wCnt = 0;
+    flow.doUntil(
+        function (callback) {
+          wCnt++;
+          setTimeout(function () {
+            console.log('Wait transit',canTransit,wCnt);
+            callback(null, canTransit);
+          }, 1000);
+        },
+        function () { return canTransit||isFerr||wCnt>99; },
+        function (err, n) {
 
-        if(!err){
-          if(isFerr){
-            innerHook(1);
-          }else
-            innerTransit();
+          if(!err){
+            if(isFerr){
+              innerHook(1);
+            }else
+              innerTransit();
+          }
         }
-      }
 
-  );
+    );
+
+  }
 
   function innerHook(rt){
     try{
@@ -499,7 +508,7 @@ exports.transitApi = function(tcfg){
               URL :hookURL,
               result:(e?'FAIL':'SUCCESS'),
               body:hookForm,
-              returnObj:e}
+              returnObj:e};
             if(e) logger.error(JSON.stringify(logInfo));
             else logger.info(JSON.stringify(logInfo));
           });
@@ -511,6 +520,17 @@ exports.transitApi = function(tcfg){
   //Transit depend on bdstatus ...
   var retryCnt = 0;
   var testStarting = '';
+  var token = { access_token:'',token_type:'Bearer'};
+  var tauth = {};
+  var tyoutube;
+  try{
+    token.access_token = tcfg.auth;//.split(' ')[1];
+    tauth = getAuth(serviceAccount,token,null);
+    tyoutube = googleapis.youtube('v3');;
+  }catch(e){
+    logger.error('get token error ...',e);
+    return innerHook(1);
+  }
   if(tcfg.status==2 && retryCnt == 0 && tcfg.isFerr!='true'){
     innerHook(0);
   }
@@ -522,9 +542,13 @@ exports.transitApi = function(tcfg){
     }
     if ((tcfg.status == 0 || tcfg.status == 1 )
         && retryCnt < retryCfg.cnt ) {
-      listStream(auth, youtube, tcfg.sid, function (err, stream) {
+      listStream(tauth, tyoutube, tcfg.sid, function (err, stream) {
         retryCnt += 1;
         //see status ...
+        if(!stream||!stream.items){
+          clearInterval(iid);
+          return innerHook(1);
+        }
         for (var i = 0; i < stream.items.length; i++) {
           var item = stream.items[i];
           var sstatus = item.status.streamStatus;
@@ -534,13 +558,14 @@ exports.transitApi = function(tcfg){
           if (sstatus == 'active') {
             if (tcfg.status == 1 ) {
               //warm up do not transit it as live
-              if(isWarmup=='false'){
+              if(tcfg.isWarmup=='false'){
                 setTimeout(function () {
-                  listBroadCast(auth, youtube, null, vid, function (err, bc) {
+
+                  listBroadCast(tauth, tyoutube, null, tcfg.vid, function (err, bc) {
                     if (err) console.log('list broadcast error ...', err);
                     if (bc && bc.items[0].status.lifeCycleStatus == bStatus[2]) {
-                      transitIt(auth, youtube, bStatus[3], vid, function (err, it) {
-                        console.log(tcfg.uName+'-'+tcfg.duid,'-- transit live -->'+vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'fail':'success');
+                      transitIt(tauth, tyoutube, bStatus[3], tcfg.vid, function (err, it) {
+                        console.log(tcfg.uName+'-'+tcfg.duid,'-- transit live -->'+tcfg.vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'fail':'success');
                         if (err) {
                           console.log(err);
                         } else {
@@ -557,7 +582,7 @@ exports.transitApi = function(tcfg){
                 clearInterval(iid);
               }
             } else if(tcfg.status != 1 && !testStarting){
-              transitIt(auth, youtube, bStatus[2], tcfg.vid, function (err, it) {
+              transitIt(tauth, tyoutube, bStatus[2], tcfg.vid, function (err, it) {
                 console.log('-- transit tesing -->'+tcfg.vid+'-->',err?'fail':'success');
                 if (err) {
                   console.log(err);
@@ -946,7 +971,7 @@ exports.u2beLive = function(liveCfg,next){
       }
     });
   });
-}
+};
 
 
 
