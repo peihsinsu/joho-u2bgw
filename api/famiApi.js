@@ -22,6 +22,7 @@ var fcfg = require('../config/config.json');
 var retryCfg = fcfg.retryCfg;
 
 var request = require('request');
+var extend = require('util')._extend;
 var bStatus = {
   0 : 'created',
   1 : 'ready',
@@ -122,60 +123,142 @@ addBroadCast = function( auth, youtube, uName, duid, nName, next) {
     },
     auth:auth
   };
-  youtube.liveBroadcasts.insert(reqBroadcast, function (err, broadcast) {
-    delete reqBroadcast.auth;
-    reqBroadcast.api = 'Broadcast Insert';
-    var bid = '';
-    if(broadcast){
-      bid = broadcast.id;
-      reqBroadcast.msg = bid;
-    }
-    logger.debug('######## step insert broadcast.########');
-    console.log('Video ID: ' + bid);
-    doLog(err,reqBroadcast);
-    next(err,bid);
-  });
+  var rCnt = 0;
+  var logInfo = extend({},reqBroadcast);
+  delete logInfo.auth;
+  logInfo.api = 'Broadcast Insert';
+  var rid = setInterval(
+      function(){
+        rCnt +=1;
+        youtube.liveBroadcasts.insert(reqBroadcast, function (err, broadcast) {
+          if(err && rCnt <=3){
+            console.log('Insert Broadcast error, repeat:',rCnt);
+            return;
+          }
+          clearInterval(rid);
+          var bid = '';
+          if(broadcast){
+            bid = broadcast.id;
+            reqBroadcast.msg = bid;
+          }
+          logger.debug('######## step insert broadcast.########');
+          console.log('Video ID: ' + bid);
+          doLog(err,logInfo);
+          next(err,bid);
+        });
+      },1500
+  );
 };
 
 //cost api 5 units quota
+//Reuse stream than create new , check stream exists and status is inactive
 addStream = function ( auth, youtube, uname, duid, next) {
-  var reqStream = {
-    part: 'snippet,cdn',
-    resource: {
-      snippet: {
-        title: uname + '-' + duid
-      },
-      cdn: {
-        format: '720p',
-        ingestionType: 'rtmp'
+  var assid;
+  var ritem;
+  listStream(auth,youtube,null,function(e,ss){
+    for(var idx in ss.items){
+      var sm = ss.items[idx];
+      //console.log('Stream info:',stream);
+      if(sm.snippet.title.indexOf(uname)>-1 && (sm.status.streamStatus==sStatus[1]||sm.status.streamStatus==[3])){
+        console.log('find the same stream');
+        assid = sm.id;
+        ritem = sm;
+        break;
       }
-    },
-    auth:auth
-  };
-  youtube.liveStreams.insert(reqStream, function (err, stream) {
-    delete reqStream.auth;
-    reqStream.api = 'Stream Insert';
-    var streamName, streamAddress;
-    if(stream){
-      streamId = stream.id;
-      streamName = stream.cdn.ingestionInfo.streamName;
-      streamAddress = stream.cdn.ingestionInfo.ingestionAddress;
-      streamUrl = streamAddress + '/' + streamName;
-      logger.debug('######## step insert stream :['+streamId+'].########');
-      console.log('Stream ID: ' + streamId + '/// url:' + streamUrl);
+    }
+    if(assid){
       var streamConfig = {
-        sid : streamId,
-        sname : streamName,
-        surl : streamUrl,
+        sid : assid,
+        sname : sm.cdn.ingestionInfo.streamName,
+        surl : sm.cdn.ingestionInfo.ingestionAddress +'/'+ sm.cdn.ingestionInfo.streamName,
         status : 0 ,
-        sStatus : 'ready',
+        sStatus : sm.status.streamStatus,
         uName : uname ,
         duid : duid
-      }
-      reqStream.msg = streamConfig;
+      };
+      doLog(e,streamConfig);
+      next(null,streamConfig)
+    }else{
+      var reqStream = {
+        part: 'snippet,cdn',
+        resource: {
+          snippet: {
+            title: uname + '-' + duid
+          },
+          cdn: {
+            format: '720p',
+            ingestionType: 'rtmp'
+          }
+        },
+        auth:auth
+      };
+      var rcnt = 0;
+      var rid = setInterval(
+        function() {
+          // Need to do retry ....
+          rcnt+=1;
+          var logInfo = extend({},reqStream);
+          delete logInfo.auth;
+          youtube.liveStreams.insert(reqStream, function (err, stream) {
+            //delete reqS.auth;
+            if(err && rcnt<=3){
+              console.log('Add stram error repeat:',i);
+              reqStream.api = 'Stream Insert err';
+              //doLog(err,logInfo);
+              return;
+            }
+            reqStream.api = 'Stream Insert';
+            var streamName, streamAddress, streamId, streamUrl;
+            if(stream){
+              streamId = stream.id;
+              streamName = stream.cdn.ingestionInfo.streamName;
+              streamAddress = stream.cdn.ingestionInfo.ingestionAddress;
+              streamUrl = streamAddress + '/' + streamName;
+              logger.debug('######## step insert stream :['+streamId+'].########');
+              console.log('Stream ID: ' + streamId + '/// url:' + streamUrl);
+              var streamConfig = {
+                sid : streamId,
+                sname : streamName,
+                surl : streamUrl,
+                status : 0 ,
+                sStatus : 'ready',
+                uName : uname ,
+                duid : duid
+              };
+              reqStream.msg = streamConfig;
+            }
+            doLog(err,logInfo);
+            clearInterval(rid);
+            next(err,streamConfig);
+          });
+        },1500);
+
+      /*youtube.liveStreams.insert(reqStream, function (err, stream) {
+        delete reqStream.auth;
+        reqStream.api = 'Stream Insert';
+        var streamName, streamAddress, streamId, streamUrl;
+        if(stream){
+          streamId = stream.id;
+          streamName = stream.cdn.ingestionInfo.streamName;
+          streamAddress = stream.cdn.ingestionInfo.ingestionAddress;
+          streamUrl = streamAddress + '/' + streamName;
+          logger.debug('######## step insert stream :['+streamId+'].########');
+          console.log('Stream ID: ' + streamId + '/// url:' + streamUrl);
+          var streamConfig = {
+            sid : streamId,
+            sname : streamName,
+            surl : streamUrl,
+            status : 0 ,
+            sStatus : 'ready',
+            uName : uname ,
+            duid : duid
+          };
+          reqStream.msg = streamConfig;
+        }
+        doLog(err,reqStream);
+        next(err,streamConfig);
+      });*/
     }
-    doLog(err,reqStream);
-    next(err,streamConfig);
   });
 };
 
@@ -193,6 +276,10 @@ bindStream = function (auth,youtube,streamId,videoId ,next) {
     bindArgs.api = 'Broadcast Bind';
     bindArgs.msg = bind;
     doLog(err,bindArgs);
+    if(err && (err.code==500 || err.code=='500') && (err.message==null || err.message == 'null')){
+      err = null;
+      //it seem don't need query broadcast information again.
+    }
     next(err,bind);
   });
 };
@@ -311,6 +398,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
     next(null, 'ffmpeg has already start' );
     //doTransit
     canTransit = true;
+    innerTransit();
   }
   if(process.env.TRANSIT){
     var wCnt = 0;
@@ -393,14 +481,16 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
     //--
     var retryCnt = 0;
     var testStarting = '';
+    console.log('------------->',streamConfig);
     if(streamConfig.status==2 && retryCnt == 0 && !isFerr){
-      innerHook(0);
+      return innerHook(0);
     }
     //計時
-    iid = setInterval(function () {
+    var iid = setInterval(function () {
       //重覆三次都錯
       if(streamConfig.status!=2 && retryCnt == retryCfg.cnt){
-        innerHook(1);
+        clearInterval(iid);
+        return innerHook(1);
       }
       if ((streamConfig.status == 0 || streamConfig.status == 1 )
           && retryCnt < retryCfg.cnt ) {
@@ -486,7 +576,7 @@ exports.transitApi = function(tcfg){
       var hookURL = tcfg.webhook+'/commJSON/NS/set_youtube_notification.php';//webhook+'/sunny/ABCD'
       console.log('#### process hook in FamiAPI:',hookURL,'isWarmup:',tcfg.isWarmup);
       var hookForm = {
-        userId:tcfg.uName,
+        userId:tcfg.user,
         duid:tcfg.duid,
         result:rt,
         nickName:tcfg.nickName,
@@ -532,13 +622,14 @@ exports.transitApi = function(tcfg){
     return innerHook(1);
   }
   if(tcfg.status==2 && retryCnt == 0 && tcfg.isFerr!='true'){
-    innerHook(0);
+    return innerHook(0);
   }
   //計時
-  iid = setInterval(function () {
+  var iid = setInterval(function () {
     //重覆三次都錯
     if(tcfg.status!=2 && retryCnt == retryCfg.cnt){
-      innerHook(1);
+      clearInterval(iid);
+      return innerHook(1);
     }
     if ((tcfg.status == 0 || tcfg.status == 1 )
         && retryCnt < retryCfg.cnt ) {
@@ -552,8 +643,8 @@ exports.transitApi = function(tcfg){
         for (var i = 0; i < stream.items.length; i++) {
           var item = stream.items[i];
           var sstatus = item.status.streamStatus;
-          console.log('transit------->:',
-              retryCnt, item.status, sstatus == sStatus[1], tcfg.status);
+          console.log(tcfg.user+'--transit------->:',
+              retryCnt, item.status, tcfg.status);
           //READY , must add broadcast status = testing check
           if (sstatus == 'active') {
             if (tcfg.status == 1 ) {
@@ -565,14 +656,14 @@ exports.transitApi = function(tcfg){
                     if (err) console.log('list broadcast error ...', err);
                     if (bc && bc.items[0].status.lifeCycleStatus == bStatus[2]) {
                       transitIt(tauth, tyoutube, bStatus[3], tcfg.vid, function (err, it) {
-                        console.log(tcfg.uName+'-'+tcfg.duid,'-- transit live -->'+tcfg.vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'fail':'success');
+                        console.log(tcfg.user+'-'+tcfg.duid,'-- transit live -->'+tcfg.vid+'-->'+bc.items[0].status.lifeCycleStatus,err?'fail':'success');
                         if (err) {
                           console.log(err);
                         } else {
                           tcfg.status == 2;
                           clearInterval(iid);
                           //do webhook
-                          innerHook(0);
+                          return innerHook(0);
                         }
                       })
                     }
@@ -624,7 +715,7 @@ function getBroadCast(liveCfg, youtube ,next){
       }
     }
   },function(err,results){
-    rtnItem = {};
+    var rtnItem = {};
     if(results.listU) rtnItem = results.listU;
     if(results.listA) rtnItem = results.listA;
     console.log('list broacast auto:',rtnItem);
@@ -659,7 +750,7 @@ function reuseBCFlow(liveCfg, bc,csId, youtube, next){
         bc.contentDetails.boundStreamId?bc.contentDetails.boundStreamId:csId,
           function(err,streams){
 
-        streamCfg = checkStreamStatus(streams.items, liveCfg);
+        var streamCfg = checkStreamStatus(streams.items, liveCfg);
         //not active should send ffmpeg
         if(!streamCfg.sstatus==sStatus[2]){
           processStream(liveCfg.auth,youtube,liveCfg.rtspSource,bc.id,streamCfg);
@@ -715,7 +806,7 @@ function doTransit(bc,liveCfg,cb,tStatus){
 
 function checkStreamStatus(streams, liveCfg, compare){
   for(var idx =0; idx < streams.length ; idx++){
-    stream = streams[idx];
+    var stream = streams[idx];
     if(stream.snippet.title == liveCfg.userName + '-' + liveCfg.duid){
       var streamConfig = {
         sid : stream.id,
@@ -785,7 +876,7 @@ exports.getLiveInfo = function(liveCfg,next) {
     liveCfg.auth = auth;
     getBroadCast(liveCfg, youtube, function (err, bCast) {
       if(err) return next(err,{code:500,msg:'Query live event error!!'+err.message});
-      rtnList = [];
+      var rtnList = [];
       if (bCast && bCast.snippet) {
         //console.log('------->',results.length);
         //for (var i = 0; i < results.length; i++) {
@@ -794,7 +885,7 @@ exports.getLiveInfo = function(liveCfg,next) {
             //(function(i){
               listStream(liveCfg.auth,youtube,bCast.contentDetails.boundStreamId,function(err,streams){
                 if(err) next(err,{code: 500, msg: 'List live events err - '+err.message});
-                rtnItem = {
+                var rtnItem = {
                   duid: liveCfg.duid,
                   eventId: bCast.id,
                   eventName: bCast.snippet.title,
@@ -884,11 +975,11 @@ var doLiveStream = function(auth,youtube,cfg,next){
 //LIVE STREAM SCENARIO
 exports.u2beLive = function(liveCfg,next){
   var youtube = googleapis.youtube('v3');
-  uToken = liveCfg.userToken;
-  uName = liveCfg.userName;
-  streamSrc = liveCfg.rtspSource;
-  duid = liveCfg.duid;
-  nName = liveCfg.nickName;
+  var uToken = liveCfg.userToken;
+  var uName = liveCfg.userName;
+  var streamSrc = liveCfg.rtspSource;
+  var duid = liveCfg.duid;
+  var nName = liveCfg.nickName;
   getAuth(serviceAccount,uToken,function(err,auth){
 
     if(err){
@@ -902,9 +993,9 @@ exports.u2beLive = function(liveCfg,next){
         //console.log(err);
         return next(err.code||501,{code:err.code||501,msg:'List event -'+err.message});
       }
-      vid = '';
-      sid = '';
-      bdstatus = '';
+      var vid = '';
+      var sid = '';
+      var bdstatus = '';
 
       if(!( cfg && cfg.id )){
         console.log('do live :',streamSrc );
@@ -918,10 +1009,10 @@ exports.u2beLive = function(liveCfg,next){
             console.log(err);
             return next(501,{code:501,msg:'List stream -'+err.message});
           }
-          streamId = stream.id;
+          var streamId = stream.id;
           streamName = stream.cdn.ingestionInfo.streamName;
           streamAddress = stream.cdn.ingestionInfo.ingestionAddress;
-          streamUrl = streamAddress + '/' + streamName;
+          var streamUrl = streamAddress + '/' + streamName;
           console.log('Stream ID: ' + streamId + '/// url:' + streamUrl);
           var streamConfig = {
             sid : streamId,
@@ -931,7 +1022,7 @@ exports.u2beLive = function(liveCfg,next){
             sStatus : stream.status.streamStatus,
             uName : uName ,
             duid : duid
-          }
+          };
           //check live stream than alert network error.
           processStream(auth,youtube,liveCfg.rtspSource,liveCfg.retry,
               liveCfg.webhook,vid,streamConfig,liveCfg.nickName,liveCfg.isWarmup,
