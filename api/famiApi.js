@@ -37,7 +37,7 @@ var sStatus = {
   1 : 'ready',
   2 : 'active',
   3 : 'inactive'
-}
+};
 var k8s = fcfg.k8s;
 var logUrl = fcfg.logBack;
 
@@ -55,15 +55,30 @@ getAuth = function(secretStore,tokenStore,next){
     next(null,auth);
   else
     return auth;
-}
-
+};
+/**
+ * -- transit tesing -->7lCYjXysbfY--> fail
+ { [Error: Error during transition]
+   code: 503,
+   errors:
+    [ { domain: 'youtube.liveBroadcast',
+        reason: 'errorExecutingTransition',
+        message: 'Error during transition' } ] }
+ it was transit to test but 503 error ...
+ * @param auth
+ * @param youtube
+ * @param status
+ * @param videoId
+ * @param next
+ * @returns {*|Object}
+ */
 transitIt = function (auth,youtube, status, videoId, next) {
   var transitArgs = {
     broadcastStatus: status,
     id: videoId,
     part: 'id,status',
     auth: auth
-  }
+  };
   return youtube.liveBroadcasts.transition(transitArgs, function (err, it) {
     delete transitArgs.auth;
     transitArgs.api = 'Broadcast Transition';
@@ -79,10 +94,10 @@ transitIt = function (auth,youtube, status, videoId, next) {
 function doLog(err,logArgs){
   if(err){
     logArgs.err = err;
-    logArgs.result = 'fail'
+    logArgs.result = 'fail';
     logger.error(JSON.stringify(logArgs));
   }else{
-    logArgs.result = 'success'
+    logArgs.result = 'success';
     logger.info(JSON.stringify(logArgs));
   }
 }
@@ -100,10 +115,18 @@ function doLog(err,logArgs){
  *   wait : 5
  * }
  **/
-checkAndTransit = function( auth, youtube, status, videoId, retry, next){
+/*checkAndTransit = function( auth, youtube, status, videoId, retry, next){
 
-}
-
+}*/
+/**
+ * Because
+ * @param auth
+ * @param youtube
+ * @param uName
+ * @param duid
+ * @param nName
+ * @param next
+ */
 addBroadCast = function( auth, youtube, uName, duid, nName, next) {
   //** CHANGE GET DATE WITH CODE
   var sDate = new Date(new Date().getTime()+30*1000);
@@ -118,7 +141,7 @@ addBroadCast = function( auth, youtube, uName, duid, nName, next) {
         title: nName + '-' + uName + '-' + duid + '-' + moment(sDate).format('YYYYMMDDHHmm')
       },
       status: {
-        privacyStatus: 'private'
+        privacyStatus: 'private'//'public'//
       }
     },
     auth:auth
@@ -202,7 +225,7 @@ addStream = function ( auth, youtube, uname, duid, next) {
           youtube.liveStreams.insert(reqStream, function (err, stream) {
             //delete reqS.auth;
             if(err && rcnt<=3){
-              console.log('Add stram error repeat:',i);
+              console.log('Add stram error repeat:',rcnt);
               reqStream.api = 'Stream Insert err';
               //doLog(err,logInfo);
               return;
@@ -232,38 +255,12 @@ addStream = function ( auth, youtube, uname, duid, next) {
             next(err,streamConfig);
           });
         },1500);
-
-      /*youtube.liveStreams.insert(reqStream, function (err, stream) {
-        delete reqStream.auth;
-        reqStream.api = 'Stream Insert';
-        var streamName, streamAddress, streamId, streamUrl;
-        if(stream){
-          streamId = stream.id;
-          streamName = stream.cdn.ingestionInfo.streamName;
-          streamAddress = stream.cdn.ingestionInfo.ingestionAddress;
-          streamUrl = streamAddress + '/' + streamName;
-          logger.debug('######## step insert stream :['+streamId+'].########');
-          console.log('Stream ID: ' + streamId + '/// url:' + streamUrl);
-          var streamConfig = {
-            sid : streamId,
-            sname : streamName,
-            surl : streamUrl,
-            status : 0 ,
-            sStatus : 'ready',
-            uName : uname ,
-            duid : duid
-          };
-          reqStream.msg = streamConfig;
-        }
-        doLog(err,reqStream);
-        next(err,streamConfig);
-      });*/
     }
   });
 };
 
 //cost api 3 units quota
-bindStream = function (auth,youtube,streamId,videoId ,next) {
+bindStream = function (auth,youtube,streamId,videoId ,cb) {
   var bindArgs = {
     part: 'id,contentDetails',
     id: videoId,
@@ -280,7 +277,7 @@ bindStream = function (auth,youtube,streamId,videoId ,next) {
       err = null;
       //it seem don't need query broadcast information again.
     }
-    next(err,bind);
+    cb(err);
   });
 };
 
@@ -297,7 +294,7 @@ listBroadCast = function( auth, youtube, status, vid, next ){
     part: 'id,snippet,contentDetails,status',
     maxResults : 50 ,
     auth:auth
-  }
+  };
   if(status) listArg.broadcastStatus = status ;
   else if(vid) listArg.id = vid ;
   else listArg.mine = true;
@@ -317,14 +314,14 @@ listStream = function(auth,youtube,streamId,next){
     part: 'id,snippet,cdn,status',
     maxResults : 50 ,
     auth:auth
-  }
+  };
   if(streamId) listArg.id = streamId ;
   else listArg.mine = true;
   youtube.liveStreams.list(listArg,function(err, streams){
     logger.debug('######## step list stream :'+(streamId?streamId:'mine')+'  .########');
     delete listArg.auth;
     listArg.api = 'Stream List';
-    listArg.msg = streams;
+    listArg.msg = err?'List fail':'List success';
     doLog(err,listArg);
     next(err,streams);
   });
@@ -456,20 +453,6 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
             if(e) logger.error(JSON.stringify(logInfo));
             else logger.info(JSON.stringify(logInfo));
           });
-      /*return request.post(hookURL,
-       {form:hookForm},
-       function(e,r,d){
-       var logInfo = {
-       user:hookForm.userId,
-       duid:hookForm.duid,
-       action:'WEBHOOK_TRANSIT',
-       URL :hookURL,
-       result:(e?'FAIL':'SUCCESS'),
-       body:hookForm,
-       returnObj:e}
-       if(e) logger.error(JSON.stringify(logInfo));
-       else logger.info(JSON.stringify(logInfo));
-       });*/
     }catch(e){
       logger.error('Error hook error',e);
     }
@@ -550,7 +533,7 @@ processStream = function (auth,youtube,rtspSrc,retry,webhook,vid,streamConfig,nN
     //--
   }
 
-}
+};
 /**
  * tcfg = {
       uName:streamConfig.uName,
@@ -723,7 +706,7 @@ function getBroadCast(liveCfg, youtube ,next){
   });
 }
 //crate broadcast flow
-function insBCFlow(liveCfg, bc, youtube, next){
+/*function insBCFlow(liveCfg, bc, youtube, next){
   flow.waterfall([
       //create B
       function(cb){
@@ -739,10 +722,10 @@ function insBCFlow(liveCfg, bc, youtube, next){
 
     }
   );
-}
+}*/
 
 //reust broadcast flow
-function reuseBCFlow(liveCfg, bc,csId, youtube, next){
+/*function reuseBCFlow(liveCfg, bc,csId, youtube, next){
   flow.auto(
   {
     listS : function(cb,results){
@@ -774,8 +757,8 @@ function reuseBCFlow(liveCfg, bc,csId, youtube, next){
     doLog(err,results);
     next(err,results);
   });
-}
-
+}*/
+/*
 function doTransit(bc,liveCfg,cb,tStatus){
   var rcnt = 0;
   //is live than return
@@ -821,7 +804,7 @@ function checkStreamStatus(streams, liveCfg, compare){
     }
   }
 }
-
+*/
 /**
  *  liveCfg = {
  *    userToken :
@@ -851,7 +834,7 @@ exports.u2beLiveFlow = function(liveCfg,next){
     }
   });
 
-}
+};
 
 function checkBCExist( items, uname, duid ){
   var prefix =  uname + '-' + duid;
@@ -861,7 +844,7 @@ function checkBCExist( items, uname, duid ){
     item = items[idx];
     //console.log("+++++",item.snippet.title,item);
     if(item.snippet.title.indexOf(prefix)>=0){
-      console.log('--->getitem =',item);
+      //console.log('--->getitem =',item);
       return item;
     }
   }
@@ -907,7 +890,7 @@ exports.getLiveInfo = function(liveCfg,next) {
       }
     });
   });
-}
+};
 
 
 var doLiveStream = function(auth,youtube,cfg,next){
@@ -1063,6 +1046,143 @@ exports.u2beLive = function(liveCfg,next){
     });
   });
 };
+/**
+ * cid : Channel ID
+ * fStr : filter string
+ *
+ */
+exports.listVideoByChannel = function(cid,fStr,liveCfg,next){
+  flow.waterfall([
+    flow.apply(getAuth, serviceAccount, liveCfg.userToken),
+    function(auth, callback) {
+      liveCfg.auth = auth;
+      var youtube = googleapis.youtube('v3');
+      getSharedVideo(liveCfg,youtube,cid,fStr,callback);
+    }
+  ], function (err, result) {
+    if(err){
+      next(null,{
+        code : 500,
+        msg : 'fail:'+err,
+        channelId : cid,
+        key: fStr,
+        items: null
+      });
+    }else{
+      next(null,{
+        code : (result && result.length>0) ? 200 : 404,
+        msg : (result && result.length>0) ?'SUCCESS' : 'NOT FOUND',
+        channelId : cid,
+        key: fStr,
+        items: result
+      });
+    }
+  });
 
+};
+//未處理換頁問題
+/**
+ * 僅取得前50筆
+ * @param liveCfg
+ * @param youtube
+ * @param cid
+ * @param fStr
+ * @param next
+ */
+function getSharedVideo(liveCfg, youtube, cid, fStr ,next){
+  function inner(status,cb){
+    listByChannel(liveCfg.auth, youtube, cid, status, function(err,s){
+      var checkR;
+      if(s) checkR = filterByKey( s.items, fStr, liveCfg.userName );
+      cb(err,checkR);
+    });
+  }
+  //Check steram
+  flow.auto({
+    listA : function(cb){
+      inner('live',cb);
+    },
+    listC : function(cb,results){
+      if(results.listU){
+        return cb(null,null);
+      }else{
+        inner('completed',cb);
+      }
+    }
+  },function(err,results){
+    logger.debug('xxxxx:',results.listC);
+    var rtnItem = [];
+    if(results.listA) rtnItem.push(results.listA);
+    if(results.listC) rtnItem.push(results.listC);
+    //console.log('list shared auto:',rtnItem);
+    next(err,rtnItem);
+  });
+}
 
+function listByChannel( auth, youtube, cid, status, next ){
 
+  var listArg = {
+    part: 'snippet',
+    channelId : cid,
+    type : 'video',
+    maxResults : 50 ,
+    auth:auth
+  };
+  if(status) listArg.eventType = status;
+
+  youtube.search.list( listArg, function(err, results){
+    //console.log('list broads=====>',broadcasts);
+    logger.debug('######## search list:',results);
+    delete listArg.auth;
+    listArg.api = 'Search List';
+    listArg.msg = '';//broadcasts;
+    doLog(err,listArg);
+    next(err,results);
+  });
+}
+/**filter by key and generate json
+ * {
+ *   userid : ,
+ *   channelId : item.snippet.channelId
+ *   channelTitle : item.snippet.channelTitle
+ *   videoId : item.id.videoId,
+ *   publishTime : item.snippet.publishedAt,
+ *   title : item.snippet.title ,
+ *   thumbnails : {
+ *             "url": "https://i.ytimg.com/vi/MSNzJ9lY9nA/default.jpg",
+ *             "width": 120,
+ *             "height": 90
+ *           } // item.snippet.thumbnails.default
+ *
+ * }
+ * @param items
+ * @param key
+ * @returns {*}
+ */
+function filterByKey( items, key , userId ){
+  var prefix =  key;
+  //console.log('checkBCExist =====>',items);
+  var item ;
+
+  var rs = [];
+  for(var idx =0;idx< items.length;idx++){
+    item = items[idx];
+    //console.log("+++++",item.snippet.title,item);
+    //console.log(item.snippet.title.indexOf(prefix),item.snippet.title,key);
+    if(item.snippet.title.indexOf(prefix)>=0){
+      //console.log('--->getitem =',item);
+      rs.push({
+        userId : userId,
+        channelId : item.snippet.channelId,
+        channelTitle : item.snippet.channelTitle,
+        videoId : item.id.videoId,
+        publishTime : item.snippet.publishedAt,
+        title : item.snippet.title ,
+        thumbnails : item.snippet.thumbnails.default
+      });
+    }
+  }
+  //console.log('xxxxx',rs);
+  if(rs.length>0) return rs;
+  else return null;
+}

@@ -9,6 +9,7 @@ var routes = require('./routes/home');
 //var users = require('./routes/users');
 var famicam = require('./routes/famicam');
 var liveHook = require('./routes/liveHook');
+var search = require('./routes/search');
 
 var app = express();
 
@@ -28,6 +29,7 @@ app.use('/', routes);
 //app.use('/users', users);
 app.use('/familive',famicam);
 app.use('/liveHook',liveHook);
+app.use('/search',search);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {

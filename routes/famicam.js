@@ -53,8 +53,13 @@ router.get('/:userid/:duid', function(req, res, next) {
     //do live stream with cfg
     api.u2beLive(cfg,function(err,rtnMsg){
       console.log('live streaming result:',err,rtnMsg);
-      if(err) return res.status(err).send(rtnMsg);
-      else return res.status(200).send(rtnMsg);
+      try{
+        if(err) return res.status(err).send(rtnMsg);
+        else return res.status(200).send(rtnMsg);
+      }catch(e){
+        logger.error('***** Response Something wrong:'+cfg.userName + ' ******',e);
+      }
+
     });
   }else return res.status(result.code).send(result);
 });
@@ -95,7 +100,7 @@ function checkParams(actionType,req){
     duid : req.params.duid,
     webhook : req.body.webHookHost || 'http://localhost:3000/liveHook',
     nickName : req.body.nickName || 'FAMI'
-  }
+  };
   if(shost) liveCfg.rtspSource = ((shost.lastIndexOf('/') == shost.length-1)? shost.substr(0,shost.length-1) :shost)+ '/' + req.params.duid;
   if(req.body.status){
     liveCfg.status = req.body.status;
@@ -110,4 +115,45 @@ function checkParams(actionType,req){
   }
   return {code:200 ,msg:liveCfg}
 }
+router.get('/share/:userid/:channelid', function(req, res, next) {
+  console.log ('get ... shared list' ,req.params, req.body, req.headers);
+  var result = {code:200,msg:'SUCCESS'};
+  if(!req.params.channelid){
+    result.code = 404;
+    result.msg = 'Channel not found';
+  }
+  var token = req.headers.authorization;
+  if(!token){
+    return {code: 403 , msg: 'Not authorized!'};
+  }else if(token.indexOf('Bearer ')<0){
+    return {code: 500 , msg: 'Token Bad format!'};
+  }
+  var tokenSet = token.split(' ');
+  var cfg = {
+    userName : req.params.userid,
+    userToken : {
+      access_token : tokenSet[1],
+      token_type : tokenSet[0]
+    }
+  };
+  logger.debug(JSON.stringify(
+      { user:req.params.userid,
+        channelid:req.params.channelid,
+        action:'GET_SHARE_INFO',
+        result:result.code==200?'SUCCESS':'FAIL',
+        returnObj:cfg,
+        headers : req.headers
+      }));
+  console.log('++++++',result);
+  if(result.code == 200){
+
+    //do serach status with cfg
+    api.listVideoByChannel(req.params.channelid,(porcess.env.DEBUG?'DOOR':req.params.userid),cfg,function(err,rtnMsg){
+      console.log('in api callback------>');
+      res.status(rtnMsg.code).send(rtnMsg);
+    });
+  } else {
+    res.status(result.code).send(result);
+  }
+});
 module.exports = router;// JavaScript Document
