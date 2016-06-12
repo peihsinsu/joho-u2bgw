@@ -141,7 +141,7 @@ addBroadCast = function( auth, youtube, uName, duid, nName, next) {
         title: nName + '-' + uName + '-' + duid + '-' + moment(sDate).format('YYYYMMDDHHmm')
       },
       status: {
-        privacyStatus: 'private'//'public'//
+        privacyStatus: 'public'//'private'
       }
     },
     auth:auth
